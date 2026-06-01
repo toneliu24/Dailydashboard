@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="我的月曆">
+<meta name="theme-color" content="#1A1612">
+<title>我的月曆</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { background:#F5F0E8; overscroll-behavior:none; }
+  #root { min-height:100vh; min-height:100dvh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+// ── CALENDAR UTILS ────────────────────────────────────────────────────────
+const MONTH_NAMES = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
+const WEEKDAY_NAMES = ["日","一","二","三","四","五","六"];
+
+// Returns 0=Sun…6=Sat for day d of given year/month (1-indexed)
+const getWeekday  = (y,m,d) => new Date(y,m-1,d).getDay();
+const daysInMonth = (y,m)   => new Date(y,m,0).getDate();
+const isWeekend   = (y,m,d) => [0,6].includes(getWeekday(y,m,d));
+const monthKey    = (y,m)   => `${y}-${String(m).padStart(2,"0")}`;
+
+// ── THEME ─────────────────────────────────────────────────────────────────
+const THEME_META = {
+  work:    { label:"上班",   color:"#B85C38", bg:"#FAE8DC", icon:"🏢" },
+  travel:  { label:"旅行",   color:"#3A78A0", bg:"#E0EEF5", icon:"✈️" },
+  event:   { label:"活動",   color:"#7B5EA7", bg:"#EFE8F8", icon:"🌱" },
+  brain:   { label:"大腦日", color:"#C9A84C", bg:"#FFF8E8", icon:"📚" },
+  body:    { label:"身體日", color:"#7A9E7E", bg:"#EEF4EE", icon:"💪" },
+  life:    { label:"生活日", color:"#C4714A", bg:"#FBF0EA", icon:"🛋" },
+  focus:   { label:"專注日", color:"#5B8FBF", bg:"#EAF2FA", icon:"🎯" },
+  free:    { label:"自由日", color:"#A0886A", bg:"#F5F0E8", icon:"🌿" },
+  weekend: { label:"週末",   color:"#888",    bg:"#F0EDE8", icon:"☕" },
+};
+
+// Default weekday theme map: 1=Mon…5=Fri
+const DEFAULT_WD_THEME = { 1:"brain", 2:"body", 3:"brain", 4:"body", 5:"life" };
+
+// ── MONTH CONFIG ──────────────────────────────────────────────────────────
+// monthConfig[monthKey] = { specialDays: { [day]: "work"|"travel"|"event" }, wdTheme: { 1-5: theme }, name: string }
+const JUNE_2026_CONFIG = {
+  name: "充電的六月",
+  wdTheme: { 1:"brain", 2:"body", 3:"brain", 4:"body", 5:"life" },
+  specialDays: {
+    3:"work", 9:"event", 11:"travel", 12:"travel", 13:"travel",
+    14:"travel", 15:"travel", 16:"work", 18:"work", 23:"work",
+  },
+};
+
+// ── PRIORITY / EST ────────────────────────────────────────────────────────
+const PRIORITY = {
+  must:   { label:"Must",   color:"#E53E3E", bg:"#FFF0F0", dot:"🔴" },
+  should: { label:"Should", color:"#C9A84C", bg:"#FFFBF0", dot:"🟡" },
+  nice:   { label:"Nice",   color:"#aaa",    bg:"#F8F8F8", dot:"⚪" },
+};
+const EST_OPTIONS = [
+  {label:"15m",mins:15},{label:"30m",mins:30},
+  {label:"1h", mins:60},{label:"1.5h",mins:90},
+  {label:"2h", mins:120},{label:"3h", mins:180},
+];
+
+// ── DEFAULTS ──────────────────────────────────────────────────────────────
+const JUNE_DEFAULT_TASKS = {
+  2:  ["📚 開始第一本書","🤖 AI CoWork 工具研究"],
+  3:  ["🏢 舊公司事務"],
+  4:  ["🤖 AI Workflow 實作","📚 讀書 40 頁"],
+  5:  ["🚗 練車 2hr","💪 傍晚運動"],
+  6:  ["🛋 家具清單整理","📚 讀書 40 頁"],
+  9:  ["🌱 新公司活動 — 觀察、建立關係"],
+  10: ["📚 完成第一本書","🤖 AI 工具深化"],
+  11: ["✈️ 出發！放空模式開啟"],
+  12: ["✈️ 探索 Day 2"],13: ["✈️ 放鬆 Day 3"],14: ["✈️ Day 4"],15: ["✈️ 回程 Day 5"],
+  16: ["🏢 舊公司事務"],
+  17: ["🚗 練車（輕鬆）","📚 開始第三本書"],
+  18: ["🏢 舊公司交接"],
+  19: ["🚗 練車 2hr","💪 運動"],
+  20: ["🛋 家具採購實地","📚 讀書下午"],
+  23: ["🏢 最後一天上班 🎉"],
+  24: ["🤖 AI CoWork 總整理","📚 第四本書"],
+  25: ["🚗 練車考前衝刺","🏢 新工作產業研究"],
+  26: ["🏢 新工作知識整理","💪 運動"],
+  27: ["🛋 家具到貨確認","📚 第五本書開始"],
+  30: ["✅ 月底回顧","📚 完成第五本書"],
+};
+const GOALS_INIT = [
+  {id:"book",icon:"📚",name:"五本書",target:5,unit:"本",count:0,scope:"month"},
+  {id:"drive",icon:"🚗",name:"練開車",target:12,unit:"次",count:0,scope:"month"},
+  {id:"sport",icon:"💪",name:"運動習慣",target:12,unit:"次",count:0,scope:"month"},
+  {id:"ai",icon:"🤖",name:"AI CoWork",target:8,unit:"次",count:0,scope:"month"},
+  {id:"newjob",icon:"🏢",name:"新工作準備",target:10,unit:"篇",count:0,scope:"month"},
+  {id:"furniture",icon:"🛋",name:"家具採購",target:3,unit:"件",count:0,scope:"month"},
+];
+
+// ── STORAGE ───────────────────────────────────────────────────────────────
+const STORAGE_KEY = "dashboard-v5";
+const loadData  = async () => { try { const v=localStorage.getItem(STORAGE_KEY); return v?JSON.parse(v):null; } catch(_){ return null; } };
+const saveData  = async (d) => { try { localStorage.setItem(STORAGE_KEY,JSON.stringify(d)); } catch(_){} };
+const saveDataSync = (d)    => { try { localStorage.setItem(STORAGE_KEY,JSON.stringify(d)); } catch(_){} };
+
+// ── MISC ──────────────────────────────────────────────────────────────────
+const HOUR_START=6, HOUR_END=23, SLOT_H=60;
+const HOURS = Array.from({length:HOUR_END-HOUR_START+1},(_,i)=>HOUR_START+i);
+const fmt   = (h,m=0)=>`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+const uid   = ()=>Math.random().toString(36).slice(2,8);
+const todayDate = new Date();
+const todayY = todayDate.getFullYear();
+const todayM = todayDate.getMonth()+1;
+const todayD = todayDate.getDate();
+
+// ── MAIN ──────────────────────────────────────────────────────────────────
+export default function App() {
+  // ── current month ──
+  const [curY, setCurY] = useState(todayY);
+  const [curM, setCurM] = useState(todayM);
+  const mk = monthKey(curY, curM); // e.g. "2026-06"
+  const isCurrentMonth = curY===todayY && curM===todayM;
+  const totalDays = daysInMonth(curY, curM);
+
+  // ── month config (per-month special days + weekday themes) ──
+  // allConfigs[mk] = { name, wdTheme:{1-5:theme}, specialDays:{d:type} }
+  const [allConfigs, setAllConfigs] = useState({ "2026-06": JUNE_2026_CONFIG });
+  const cfg = allConfigs[mk] || { name:"", wdTheme:{...DEFAULT_WD_THEME}, specialDays:{} };
+
+  const getDayTheme = (d) => {
+    if (isWeekend(curY,curM,d)) return "weekend";
+    const sp = cfg.specialDays[d];
+    if (sp) return sp;
+    const wd = getWeekday(curY,curM,d); // 0=Sun..6=Sat
+    return cfg.wdTheme[wd] || "free";
+  };
+
+  // ── per-month data (tasks, done, schedule, note, taskMeta) ──
+  const [allMonthData, setAllMonthData] = useState({
+    "2026-06": { tasks: JUNE_DEFAULT_TASKS, done:{}, schedule:{}, note:{}, taskMeta:{} }
+  });
+
+  const mdata = allMonthData[mk] || { tasks:{}, done:{}, schedule:{}, note:{}, taskMeta:{} };
+  const patchMdata = (patch) => setAllMonthData(p=>({...p,[mk]:{...mdata,...patch}}));
+
+  const tasks    = mdata.tasks    || {};
+  const done     = mdata.done     || {};
+  const schedule = mdata.schedule || {};
+  const note     = mdata.note     || {};
+  const taskMeta = mdata.taskMeta || {};
+
+  const setTasks    = (fn) => patchMdata({tasks:    typeof fn==="function"?fn(tasks):fn});
+  const setDone     = (fn) => patchMdata({done:     typeof fn==="function"?fn(done):fn});
+  const setSchedule = (fn) => patchMdata({schedule: typeof fn==="function"?fn(schedule):fn});
+  const setNote     = (fn) => patchMdata({note:     typeof fn==="function"?fn(note):fn});
+  const setTaskMeta = (fn) => patchMdata({taskMeta: typeof fn==="function"?fn(taskMeta):fn});
+
+  // ── cross-month data ──
+  const [goals,  setGoals]  = useState(GOALS_INIT);
+  const [builds, setBuilds] = useState([]); // AI product log — permanent
+
+  // ── ui state ──
+  const [view,    setView]    = useState("calendar");
+  const [selDay,  setSelDay]  = useState(isCurrentMonth ? todayD : 1);
+  const [loaded,  setLoaded]  = useState(false);
+  const [isMobile,setIsMobile]= useState(window.innerWidth < 640);
+  const [poolOpen,setPoolOpen]= useState(false);
+
+  // modals
+  const [editDay,       setEditDay]       = useState(null);
+  const [editText,      setEditText]      = useState("");
+  const [editGoalId,    setEditGoalId]    = useState(null);
+  const [editGoalForm,  setEditGoalForm]  = useState({});
+  const [editBlock,     setEditBlock]     = useState(null);
+  const [editBlockForm, setEditBlockForm] = useState({});
+  const [editMeta,      setEditMeta]      = useState(null);
+  const [editBuild,     setEditBuild]     = useState(null);
+  const [editMonthCfg,  setEditMonthCfg]  = useState(false);
+  const [goalLink,      setGoalLink]      = useState(null);
+  const [quickAdd,      setQuickAdd]      = useState(false);
+  const [quickForm,     setQuickForm]     = useState({text:"",hour:"9",min:"0"});
+  const [dropHint,      setDropHint]      = useState(null);
+
+  // drag
+  const ghostRef  = useRef(null);
+  const dragInfo  = useRef(null);
+  const hoverHour = useRef(null);
+
+  // ── RESPONSIVE ──
+  useEffect(()=>{
+    const fn=()=>setIsMobile(window.innerWidth<640);
+    window.addEventListener("resize",fn);
+    return ()=>window.removeEventListener("resize",fn);
+  },[]);
+
+  // ── LOAD / SAVE ──
+  const latestState = useRef({allMonthData,goals,builds,allConfigs});
+  useEffect(()=>{ latestState.current={allMonthData,goals,builds,allConfigs}; });
+
+  useEffect(()=>{
+    loadData().then(s=>{
+      if(s){
+        if(s.allMonthData) setAllMonthData(s.allMonthData);
+        if(s.goals)        setGoals(s.goals);
+        if(s.builds)       setBuilds(s.builds);
+        if(s.allConfigs)   setAllConfigs(s.allConfigs);
+      }
+      setLoaded(true);
+    });
+    const handleUnload=()=>saveDataSync(latestState.current);
+    window.addEventListener("beforeunload",handleUnload);
+    document.addEventListener("visibilitychange",()=>{
+      if(document.visibilityState==="hidden") saveDataSync(latestState.current);
+    });
+    return ()=>window.removeEventListener("beforeunload",handleUnload);
+  },[]);
+
+  const saveTimer=useRef(null);
+  useEffect(()=>{
+    if(!loaded) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current=setTimeout(()=>saveData({allMonthData,goals,builds,allConfigs}),600);
+    return ()=>clearTimeout(saveTimer.current);
+  },[allMonthData,goals,builds,allConfigs,loaded]);
+
+  // ── TASK HELPERS ──
+  const getDayTasks    = (d)   => tasks[d] || [];
+  const completedCount = (d)   => getDayTasks(d).filter((_,i)=>done[`${d}-${i}`]).length;
+  const getMeta        = (d,i) => taskMeta[`${d}-${i}`] || {priority:"nice",estMins:60};
+  const setMeta        = (d,i,patch) => setTaskMeta(p=>({...p,[`${d}-${i}`]:{...getMeta(d,i),...patch}}));
+  const openEditTask   = (d)   => { setEditDay(d); setEditText(getDayTasks(d).join("\n")); };
+  const saveEditTask   = ()    => { setTasks(p=>({...p,[editDay]:editText.split("\n").map(l=>l.trim()).filter(Boolean)})); setEditDay(null); };
+
+  const toggleDone = (day,idx) => {
+    const key=`${day}-${idx}`;
+    const wasUndone=!done[key];
+    setDone(p=>({...p,[key]:wasUndone}));
+    if(wasUndone) setGoalLink({taskName:getDayTasks(day)[idx]});
+  };
+
+  // ── GOAL HELPERS ──
+  const bumpGoal    = (id,delta) => setGoals(p=>p.map(g=>g.id===id?{...g,count:Math.max(0,Math.min(g.target,g.count+delta))}:g));
+  const openEditGoal= (g)        => { setEditGoalId(g.id); setEditGoalForm({name:g.name,icon:g.icon,target:String(g.target),unit:g.unit,scope:g.scope||"month"}); };
+  const openAddGoal = ()         => { setEditGoalId("__new__"); setEditGoalForm({name:"",icon:"⭐",target:"1",unit:"次",scope:"month",_id:uid()}); };
+  const saveGoalEdit= ()         => {
+    const target=Math.max(1,parseInt(editGoalForm.target)||1);
+    if(editGoalId==="__new__") setGoals(p=>[...p,{id:editGoalForm._id||uid(),icon:editGoalForm.icon||"⭐",name:editGoalForm.name||"新目標",target,unit:editGoalForm.unit||"次",count:0,scope:editGoalForm.scope||"month"}]);
+    else setGoals(p=>p.map(g=>g.id===editGoalId?{...g,...editGoalForm,target}:g));
+    setEditGoalId(null);
+  };
+  const deleteGoal=(id)=>{ setGoals(p=>p.filter(g=>g.id!==id)); setEditGoalId(null); };
+
+  // ── SCHEDULE HELPERS ──
+  const daySchedule  = (d)   => schedule[d] || [];
+  const addBlock     = (d,taskText,startH,startM=0,durH=1,durM=0) => setSchedule(p=>({...p,[d]:[...(p[d]||[]),{id:uid(),taskText,startH,startM,durH,durM}]}));
+  const removeBlock  = (d,id)=> setSchedule(p=>({...p,[d]:(p[d]||[]).filter(b=>b.id!==id)}));
+  const openEditBlock= (d,block)=>{ setEditBlock({day:d,id:block.id}); setEditBlockForm({taskText:block.taskText,startH:String(block.startH),startM:String(block.startM||0),durH:String(block.durH),durM:String(block.durM||0)}); };
+  const saveEditBlock= ()=>{
+    const {day,id}=editBlock;
+    setSchedule(p=>({...p,[day]:(p[day]||[]).map(b=>b.id!==id?b:{...b,taskText:editBlockForm.taskText,startH:parseInt(editBlockForm.startH)||HOUR_START,startM:parseInt(editBlockForm.startM)||0,durH:parseInt(editBlockForm.durH)||0,durM:parseInt(editBlockForm.durM)||0})}));
+    setEditBlock(null);
+  };
+
+  // ── MONTH CONFIG ──
+  const saveCfgPatch = (patch) => setAllConfigs(p=>({...p,[mk]:{...cfg,...patch}}));
+
+  // ── DRAG ──
+  const createGhost=(text,x,y)=>{
+    const el=document.getElementById("drag-ghost"); if(el) el.remove();
+    const g=document.createElement("div");
+    g.id="drag-ghost"; g.textContent=text;
+    Object.assign(g.style,{position:"fixed",zIndex:"9999",pointerEvents:"none",background:"#1A1612",color:"#F5F0E8",padding:"8px 14px",borderRadius:"8px",fontSize:"13px",boxShadow:"0 8px 24px rgba(0,0,0,0.35)",maxWidth:"200px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",transform:"translate(-50%,-50%)",left:x+"px",top:y+"px"});
+    document.body.appendChild(g); ghostRef.current=g;
+  };
+  const moveGhost=(x,y)=>{ if(ghostRef.current){ghostRef.current.style.left=x+"px";ghostRef.current.style.top=y+"px";} };
+  const removeGhost=()=>{ const el=document.getElementById("drag-ghost"); if(el) el.remove(); ghostRef.current=null; };
+  const getHourAtPoint=(x,y)=>{ if(ghostRef.current) ghostRef.current.style.display="none"; const el=document.elementFromPoint(x,y); if(ghostRef.current) ghostRef.current.style.display=""; if(!el) return null; const row=el.closest("[data-hour]"); return row?parseInt(row.getAttribute("data-hour")):null; };
+
+  const onTouchStartTask=(e,text,blockId=null,estMins=60)=>{ e.preventDefault(); dragInfo.current={text,blockId,estMins}; const t=e.touches[0]; createGhost(text,t.clientX,t.clientY); };
+  const onTouchEnd=(e)=>{
+    if(!dragInfo.current) return;
+    const hour=hoverHour.current;
+    if(hour!==null){ const{text,blockId,estMins}=dragInfo.current; const dH=Math.floor((estMins||60)/60),dM=(estMins||60)%60;
+      if(blockId) setSchedule(p=>({...p,[selDay]:(p[selDay]||[]).map(b=>b.id!==blockId?b:{...b,startH:hour,startM:0})}));
+      else addBlock(selDay,text,hour,0,dH,dM);
+    }
+    removeGhost(); dragInfo.current=null; hoverHour.current=null; setDropHint(null);
+  };
+  const onMouseDownTask=(e,text,blockId=null,estMins=60)=>{
+    dragInfo.current={text,blockId,estMins}; createGhost(text,e.clientX,e.clientY);
+    const onMove=(ev)=>{ moveGhost(ev.clientX,ev.clientY); const h=getHourAtPoint(ev.clientX,ev.clientY); hoverHour.current=h; setDropHint(h); };
+    const onUp=()=>{
+      const hour=hoverHour.current;
+      if(hour!==null&&dragInfo.current){ const{text:t,blockId:bid,estMins:em}=dragInfo.current; const dH=Math.floor((em||60)/60),dM=(em||60)%60;
+        if(bid) setSchedule(p=>({...p,[selDay]:(p[selDay]||[]).map(b=>b.id!==bid?b:{...b,startH:hour,startM:0})}));
+        else addBlock(selDay,t,hour,0,dH,dM);
+      }
+      removeGhost(); dragInfo.current=null; hoverHour.current=null; setDropHint(null);
+      window.removeEventListener("mousemove",onMove); window.removeEventListener("mouseup",onUp);
+    };
+    window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+  };
+
+  useEffect(()=>{
+    const onMove=(e)=>{ if(dragInfo.current){ e.preventDefault(); const t=e.touches[0]; moveGhost(t.clientX,t.clientY); const h=getHourAtPoint(t.clientX,t.clientY); hoverHour.current=h; setDropHint(h); }};
+    const onEnd=(e)=>{ if(dragInfo.current) onTouchEnd(e); };
+    window.addEventListener("touchmove",onMove,{passive:false});
+    window.addEventListener("touchend",onEnd);
+    window.addEventListener("touchcancel",onEnd);
+    return ()=>{ window.removeEventListener("touchmove",onMove); window.removeEventListener("touchend",onEnd); window.removeEventListener("touchcancel",onEnd); };
+  },[selDay,mk]);
+
+  // ── DERIVED ──
+  const theme   = THEME_META[getDayTheme(selDay)] || THEME_META.free;
+  const dayNote = note[selDay] || "";
+
+  // ── NAV ──────────────────────────────────────────────────────────────────
+  return (
+    <div style={{fontFamily:"'Noto Serif TC',serif",background:"#F5F0E8",minHeight:"100vh",color:"#1A1612"}}>
+
+      {/* TOP NAV */}
+      <div style={{background:"#1A1612",color:"#F5F0E8",padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 12px rgba(0,0,0,0.3)"}}>
+        {/* Month switcher */}
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={()=>{ if(curM===1){setCurY(y=>y-1);setCurM(12);}else setCurM(m=>m-1); setSelDay(1); }} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:16,cursor:"pointer",padding:"2px 4px"}}>‹</button>
+          <div style={{cursor:"pointer"}} onClick={()=>setEditMonthCfg(true)}>
+            <div style={{fontSize:9,letterSpacing:3,color:"#C9A84C",fontFamily:"monospace"}}>{curY} · {MONTH_NAMES[curM-1]}</div>
+            <div style={{fontSize:13,fontWeight:300}}>{cfg.name||MONTH_NAMES[curM-1]} <span style={{fontSize:9,color:"rgba(255,255,255,0.3)"}}>⚙</span></div>
+          </div>
+          <button onClick={()=>{ if(curM===12){setCurY(y=>y+1);setCurM(1);}else setCurM(m=>m+1); setSelDay(1); }} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:16,cursor:"pointer",padding:"2px 4px"}}>›</button>
+        </div>
+        {/* Tab buttons */}
+        <div style={{display:"flex",gap:4}}>
+          {[["calendar","📅"],["today","☀️"],["goals","🎯"],["builds","🛠"]].map(([v,icon])=>(
+            <button key={v} onClick={()=>setView(v)} style={{background:view===v?"#C9A84C":"rgba(255,255,255,0.1)",color:view===v?"#1A1612":"#F5F0E8",border:"none",borderRadius:6,padding:"6px 11px",fontSize:14,cursor:"pointer",transition:"all 0.2s"}}>{icon}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* ══ CALENDAR ══════════════════════════════════════════════════════════ */}
+      {view==="calendar"&&(
+        <div style={{padding:"12px 10px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
+            {["一","二","三","四","五","六","日"].map(d=>(
+              <div key={d} style={{textAlign:"center",fontSize:10,fontFamily:"monospace",color:"#aaa",padding:"2px 0",letterSpacing:1}}>{d}</div>
+            ))}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+            {/* offset: Mon=1 so offset = (getWeekday-1+7)%7 */}
+            {Array.from({length:(getWeekday(curY,curM,1)+6)%7},(_,i)=><div key={`e${i}`}/>)}
+            {Array.from({length:totalDays},(_,i)=>i+1).map(day=>{
+              const th    = getDayTheme(day);
+              const meta  = THEME_META[th]||THEME_META.free;
+              const isSel = day===selDay;
+              const isToday=isCurrentMonth&&day===todayD;
+              const dayTasks=getDayTasks(day);
+              const comp  = dayTasks.filter((_,i)=>done[`${day}-${i}`]).length;
+              const total = dayTasks.length;
+              const sched = daySchedule(day).length;
+              const weekend=isWeekend(curY,curM,day);
+              return (
+                <div key={day} onClick={()=>{setSelDay(day);setView("today");}}
+                  style={{background:isSel?meta.color:meta.bg,border:isToday?`2px solid ${meta.color}`:`1px solid ${meta.color}25`,borderRadius:9,padding:"7px 7px 6px",minHeight:weekend?50:86,cursor:"pointer",color:isSel?"#fff":"#1A1612",display:"flex",flexDirection:"column",gap:3,overflow:"hidden",transition:"box-shadow 0.15s,transform 0.1s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.boxShadow=`0 4px 14px ${meta.color}40`;e.currentTarget.style.transform="translateY(-1px)";}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow="";e.currentTarget.style.transform="";}}
+                >
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontFamily:"monospace",fontSize:12,fontWeight:700,background:isToday&&!isSel?meta.color:"transparent",color:isToday&&!isSel?"#fff":(isSel?"#fff":meta.color),borderRadius:4,padding:isToday&&!isSel?"1px 5px":"0"}}>{day}</span>
+                    <span style={{fontSize:11,opacity:0.8}}>{meta.icon}</span>
+                  </div>
+                  {!weekend&&dayTasks.slice(0,3).map((t,i)=>{
+                    const isDone=!!done[`${day}-${i}`];
+                    const mPrio=getMeta(day,i);
+                    const pColor=PRIORITY[mPrio.priority]?.color||"#aaa";
+                    return <div key={i} style={{fontSize:9,lineHeight:1.3,color:isSel?"rgba(255,255,255,0.9)":(isDone?"#bbb":"#444"),textDecoration:isDone?"line-through":"none",display:"flex",alignItems:"flex-start",gap:3,overflow:"hidden"}}>
+                      <span style={{width:5,height:5,borderRadius:"50%",flexShrink:0,marginTop:2,background:isDone?"#ccc":(isSel?"rgba(255,255,255,0.8)":pColor)}}/>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,fontWeight:mPrio.priority==="must"&&!isDone?700:400}}>{t}</span>
+                    </div>;
+                  })}
+                  {!weekend&&total>3&&<div style={{fontSize:8,fontFamily:"monospace",color:isSel?"rgba(255,255,255,0.6)":meta.color,opacity:0.7}}>+{total-3} 更多</div>}
+                  {!weekend&&total>0&&<div style={{marginTop:"auto",paddingTop:2}}>
+                    <div style={{background:isSel?"rgba(255,255,255,0.25)":`${meta.color}20`,borderRadius:2,height:2}}>
+                      <div style={{background:isSel?"#fff":meta.color,borderRadius:2,height:"100%",width:`${(comp/total)*100}%`,transition:"width 0.3s"}}/>
+                    </div>
+                    {sched>0&&<div style={{fontSize:7,fontFamily:"monospace",marginTop:2,color:isSel?"rgba(255,255,255,0.6)":meta.color}}>⏰ {sched}</div>}
+                  </div>}
+                </div>
+              );
+            })}
+          </div>
+          {/* Legend */}
+          <div style={{marginTop:12,display:"flex",flexWrap:"wrap",gap:8}}>
+            {Object.entries(THEME_META).map(([k,m])=>(
+              <div key={k} style={{display:"flex",alignItems:"center",gap:4,fontSize:9,fontFamily:"monospace",color:"#888"}}>
+                <div style={{width:9,height:9,borderRadius:2,background:m.bg,border:`1.5px solid ${m.color}`}}/>
+                {m.icon} {m.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══ TODAY ══════════════════════════════════════════════════════════════ */}
+      {view==="today"&&(
+        <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 50px)"}}>
+
+          {/* Header */}
+          <div style={{background:theme.bg,borderBottom:`2px solid ${theme.color}20`,padding:"8px 14px",flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:20}}>{theme.icon}</span>
+                <div>
+                  <div style={{fontSize:9,fontFamily:"monospace",letterSpacing:2,color:theme.color}}>{WEEKDAY_NAMES[getWeekday(curY,curM,selDay)]} · {curM}/{selDay}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:theme.color}}>{theme.label}</div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                {isMobile&&<button onClick={()=>setPoolOpen(p=>!p)} style={{background:poolOpen?theme.color:"rgba(0,0,0,0.07)",color:poolOpen?"#fff":theme.color,border:`1px solid ${theme.color}40`,borderRadius:6,padding:"5px 10px",fontSize:11,fontFamily:"monospace",cursor:"pointer"}}>{poolOpen?"✕ 收起":"📋 任務"}</button>}
+                <button onClick={()=>setSelDay(d=>Math.max(1,d-1))} style={{background:"rgba(0,0,0,0.07)",border:"none",borderRadius:6,width:28,height:28,cursor:"pointer",fontSize:15}}>‹</button>
+                <button onClick={()=>setSelDay(d=>Math.min(totalDays,d+1))} style={{background:"rgba(0,0,0,0.07)",border:"none",borderRadius:6,width:28,height:28,cursor:"pointer",fontSize:15}}>›</button>
+              </div>
+            </div>
+            <div style={{overflowX:"auto",display:"flex",gap:3,paddingBottom:1}}>
+              {Array.from({length:totalDays},(_,i)=>i+1).map(d=>{
+                const m=THEME_META[getDayTheme(d)]||THEME_META.free;
+                const isSel=d===selDay,isToday=isCurrentMonth&&d===todayD;
+                return <button key={d} onClick={()=>setSelDay(d)} style={{minWidth:26,height:26,borderRadius:5,background:isSel?m.color:m.bg,border:isToday?`2px solid ${m.color}`:`1px solid ${m.color}25`,color:isSel?"#fff":m.color,fontSize:10,fontFamily:"monospace",fontWeight:isSel?700:400,cursor:"pointer",flexShrink:0}}>{d}</button>;
+              })}
+            </div>
+          </div>
+
+          {/* Mobile pool drawer */}
+          {isMobile&&poolOpen&&(
+            <div style={{background:"#FAF8F4",borderBottom:`2px solid ${theme.color}20`,flexShrink:0,maxHeight:"38vh",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+              <div style={{padding:"8px 14px",borderBottom:"1px solid #eee",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+                <span style={{fontSize:10,fontFamily:"monospace",letterSpacing:1.5,color:"#999"}}>任務池 — 長按拖到下方時間軸</span>
+                <button onClick={()=>openEditTask(selDay)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:"#bbb"}}>✏️</button>
+              </div>
+              <div style={{overflowX:"auto",overflowY:"hidden",display:"flex",gap:8,padding:"10px 14px",flexShrink:0}}>
+                {getDayTasks(selDay).length===0&&<div style={{fontSize:11,color:"#ccc",fontFamily:"monospace",whiteSpace:"nowrap"}}>無任務 — 點 ✏️ 新增</div>}
+                {getDayTasks(selDay).map((task,i)=>{
+                  const isDone=!!done[`${selDay}-${i}`],inSched=daySchedule(selDay).some(b=>b.taskText===task);
+                  const meta=getMeta(selDay,i),pColor=PRIORITY[meta.priority]?.color||"#aaa";
+                  return <div key={i} onTouchStart={(e)=>{onTouchStartTask(e,task,null,meta.estMins);setPoolOpen(false);}} onMouseDown={(e)=>onMouseDownTask(e,task,null,meta.estMins)}
+                    style={{flexShrink:0,background:isDone?"#f0ede8":inSched?`${theme.color}18`:"#fff",border:`1.5px solid ${inSched?theme.color+"70":"#e8e4de"}`,borderLeft:`3px solid ${pColor}`,borderRadius:20,padding:"7px 14px",fontSize:12,color:isDone?"#bbb":"#1A1612",textDecoration:isDone?"line-through":"none",userSelect:"none",touchAction:"none",cursor:"grab",display:"flex",alignItems:"center",gap:7,whiteSpace:"nowrap"}}>
+                    <span onClick={(e)=>{e.stopPropagation();toggleDone(selDay,i);}} style={{width:15,height:15,borderRadius:4,flexShrink:0,border:`1.5px solid ${isDone?theme.color:"#ccc"}`,background:isDone?theme.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:9,color:"#fff"}}>{isDone&&"✓"}</span>
+                    {task}
+                    {inSched&&<span style={{fontSize:10}}>⏰</span>}
+                    <span onClick={(e)=>{e.stopPropagation();setEditMeta({day:selDay,idx:i});}} style={{fontSize:9,fontFamily:"monospace",color:pColor,background:`${pColor}15`,padding:"1px 6px",borderRadius:10,cursor:"pointer",flexShrink:0}}>{meta.estMins>=60?`${meta.estMins/60}h`:`${meta.estMins}m`}</span>
+                  </div>;
+                })}
+                <button onClick={()=>{setQuickForm({text:"",hour:"9",min:"0"});setQuickAdd(true);}} style={{flexShrink:0,padding:"7px 14px",borderRadius:20,border:`1.5px dashed ${theme.color}60`,background:"transparent",color:theme.color,fontSize:12,fontFamily:"monospace",cursor:"pointer",whiteSpace:"nowrap"}}>＋ 新增</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+            {/* Desktop pool */}
+            {!isMobile&&(
+              <div style={{width:180,flexShrink:0,borderRight:`1px solid ${theme.color}15`,background:"#FAF8F4",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+                <div style={{padding:"8px 12px",borderBottom:"1px solid #eee",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:9,fontFamily:"monospace",letterSpacing:1.5,color:"#999"}}>任務池</span>
+                  <button onClick={()=>openEditTask(selDay)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#bbb"}}>✏️</button>
+                </div>
+                <div style={{padding:"5px 10px",background:"#f5f2ee",borderBottom:"1px solid #eee"}}>
+                  <div style={{fontSize:9,fontFamily:"monospace",color:"#bbb",textAlign:"center"}}>長按任務 → 拖到右側時間軸</div>
+                </div>
+                <div style={{flex:1,overflowY:"auto",padding:"6px"}}>
+                  {getDayTasks(selDay).length===0&&<div style={{fontSize:11,color:"#ccc",textAlign:"center",marginTop:16,fontFamily:"monospace"}}>無任務<br/>點 ✏️ 新增</div>}
+                  {getDayTasks(selDay).map((task,i)=>{
+                    const isDone=!!done[`${selDay}-${i}`],inSched=daySchedule(selDay).some(b=>b.taskText===task);
+                    const meta=getMeta(selDay,i),pColor=PRIORITY[meta.priority]?.color||"#aaa";
+                    return <div key={i} onTouchStart={(e)=>onTouchStartTask(e,task,null,meta.estMins)} onMouseDown={(e)=>onMouseDownTask(e,task,null,meta.estMins)}
+                      style={{background:isDone?"#f0ede8":inSched?`${theme.color}10`:"#fff",border:`1px solid ${inSched?theme.color+"50":"#e8e4de"}`,borderLeft:`3px solid ${pColor}`,borderRadius:7,padding:"7px 8px",marginBottom:5,fontSize:11,lineHeight:1.5,textDecoration:isDone?"line-through":"none",color:isDone?"#bbb":"#1A1612",userSelect:"none",touchAction:"none",cursor:"grab"}}>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:5}}>
+                        <span onClick={(e)=>{e.stopPropagation();toggleDone(selDay,i);}} style={{width:13,height:13,borderRadius:3,flexShrink:0,marginTop:1,border:`1.5px solid ${isDone?theme.color:"#ccc"}`,background:isDone?theme.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:8,color:"#fff"}}>{isDone&&"✓"}</span>
+                        <span style={{flex:1}}>{task}</span>
+                      </div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
+                        <span onClick={(e)=>{e.stopPropagation();setEditMeta({day:selDay,idx:i});}} style={{fontSize:9,fontFamily:"monospace",color:pColor,background:`${pColor}15`,padding:"1px 6px",borderRadius:8,cursor:"pointer"}}>{PRIORITY[meta.priority]?.label} · {meta.estMins>=60?`${meta.estMins/60}h`:`${meta.estMins}m`}</span>
+                        {inSched&&<span style={{fontSize:8,fontFamily:"monospace",color:theme.color}}>⏰</span>}
+                      </div>
+                      <div style={{textAlign:"right",fontSize:9,color:"#ddd",marginTop:1}}>⠿⠿</div>
+                    </div>;
+                  })}
+                </div>
+                <div style={{padding:"6px",borderTop:"1px solid #eee"}}>
+                  <button onClick={()=>{setQuickForm({text:"",hour:"9",min:"0"});setQuickAdd(true);}} style={{width:"100%",padding:"6px",borderRadius:6,border:`1px dashed ${theme.color}60`,background:"transparent",color:theme.color,fontSize:10,fontFamily:"monospace",cursor:"pointer"}}>＋ 新增 & 排入</button>
+                </div>
+              </div>
+            )}
+
+            {/* Timeline */}
+            <div style={{flex:1,overflowY:"auto",background:"#FDFCFA",position:"relative"}}>
+              <div style={{position:"relative",height:SLOT_H*(HOUR_END-HOUR_START+1),minWidth:0}}>
+                {HOURS.map(hour=>{
+                  const isHint=dropHint===hour,top=(hour-HOUR_START)*SLOT_H;
+                  return <div key={hour} data-hour={hour} style={{position:"absolute",top,left:0,right:0,height:SLOT_H,borderBottom:"1px solid #f0ede8",background:isHint?`${theme.color}08`:"transparent",transition:"background 0.12s",display:"flex"}}>
+                    <div style={{width:44,flexShrink:0,paddingTop:6,paddingRight:6,textAlign:"right",fontFamily:"monospace",fontSize:10,color:isHint?theme.color:(hour===new Date().getHours()&&isCurrentMonth&&selDay===todayD?"#E53E3E":"#ccc"),borderRight:`1px solid ${isHint?theme.color+"50":"#f0ede8"}`,fontWeight:isHint?700:400,pointerEvents:"none"}}>{fmt(hour)}</div>
+                    {isHint&&<div style={{flex:1,display:"flex",alignItems:"center",paddingLeft:6,pointerEvents:"none"}}><div style={{width:"100%",height:SLOT_H-8,border:`2px dashed ${theme.color}80`,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:theme.color,fontFamily:"monospace",opacity:0.8}}>放開排入 {fmt(hour)}</div></div>}
+                  </div>;
+                })}
+                {HOURS.map(hour=><div key={`t${hour}`} style={{position:"absolute",top:(hour-HOUR_START)*SLOT_H+SLOT_H/2,left:44,right:0,height:1,background:"#f5f2ee",pointerEvents:"none"}}/>)}
+                {isCurrentMonth&&selDay===todayD&&(()=>{
+                  const now=new Date(),top=((now.getHours()-HOUR_START)+now.getMinutes()/60)*SLOT_H;
+                  if(top<0||top>SLOT_H*(HOUR_END-HOUR_START+1)) return null;
+                  return <div style={{position:"absolute",left:44,right:0,top,height:2,background:"#E53E3E",zIndex:20,pointerEvents:"none"}}><div style={{position:"absolute",left:-5,top:-4,width:9,height:9,borderRadius:"50%",background:"#E53E3E"}}/></div>;
+                })()}
+                {daySchedule(selDay).map(block=>{
+                  const durMins=block.durH*60+(block.durM||0);
+                  const bTop=(block.startH-HOUR_START)*SLOT_H+(block.startM||0)/60*SLOT_H;
+                  const bH=Math.max(SLOT_H*0.5,durMins/60*SLOT_H);
+                  return <div key={block.id} onTouchStart={(e)=>onTouchStartTask(e,block.taskText,block.id,durMins)} onMouseDown={(e)=>onMouseDownTask(e,block.taskText,block.id,durMins)}
+                    style={{position:"absolute",top:bTop+2,left:48,right:4,height:bH-4,background:theme.bg,border:`1.5px solid ${theme.color}`,borderLeft:`4px solid ${theme.color}`,borderRadius:7,padding:"4px 7px",boxShadow:`0 2px 10px ${theme.color}25`,overflow:"hidden",cursor:"grab",userSelect:"none",touchAction:"none",zIndex:5,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:4}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:9,fontFamily:"monospace",color:theme.color,marginBottom:2,whiteSpace:"nowrap"}}>{fmt(block.startH,block.startM||0)} – {(()=>{const e=(block.startH*60+(block.startM||0))+block.durH*60+(block.durM||0);return fmt(Math.floor(e/60),e%60);})()}</div>
+                        <div style={{fontWeight:600,color:"#1A1612",fontSize:12,whiteSpace:bH>SLOT_H?"normal":"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{block.taskText}</div>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:1,flexShrink:0}}>
+                        <button onClick={(e)=>{e.stopPropagation();openEditBlock(selDay,block);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#bbb",padding:"1px 2px",lineHeight:1}}>✏️</button>
+                        <button onClick={(e)=>{e.stopPropagation();removeBlock(selDay,block.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#ccc",padding:"1px 2px",lineHeight:1}}>✕</button>
+                      </div>
+                    </div>
+                    {bH>=SLOT_H&&<div style={{fontSize:9,fontFamily:"monospace",color:theme.color,opacity:0.7,marginTop:2}}>{block.durH>0?`${block.durH}hr`:""}{(block.durM||0)>0?` ${block.durM}min`:""}</div>}
+                  </div>;
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div style={{borderTop:"1px solid #e8e4de",background:"#FAF8F4",padding:"7px 14px",display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
+            <span style={{fontSize:12}}>📝</span>
+            <input value={dayNote} onChange={e=>setNote(p=>({...p,[selDay]:e.target.value}))} placeholder="今日筆記 — 一句話記下學到的事" style={{flex:1,border:"none",background:"transparent",fontSize:12,fontFamily:"'Noto Serif TC',serif",color:"#1A1612",outline:"none"}}/>
+          </div>
+        </div>
+      )}
+
+      {/* ══ GOALS ══════════════════════════════════════════════════════════════ */}
+      {view==="goals"&&(
+        <div style={{padding:"14px"}}>
+          <div style={{marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:10,fontFamily:"monospace",color:"#888",letterSpacing:1}}>點 +/− 更新進度</span>
+            <button onClick={openAddGoal} style={{background:"#1A1612",color:"#C9A84C",border:"none",borderRadius:7,padding:"7px 13px",fontSize:11,fontFamily:"monospace",cursor:"pointer"}}>＋ 新增目標</button>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:9}}>
+            {goals.map(g=>{
+              const pct=Math.min(100,(g.count/g.target)*100),full=pct>=100;
+              return <div key={g.id} style={{background:full?"#F0F8F0":"#fff",borderRadius:11,border:full?"1px solid #7A9E7E40":"1px solid #e8e4de",padding:"13px 14px",display:"flex",alignItems:"center",gap:11}}>
+                <span style={{fontSize:22,cursor:"pointer"}} onClick={()=>openEditGoal(g)}>{g.icon}</span>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{fontSize:13,fontWeight:600}}>{g.name}</span>
+                      <span style={{fontSize:9,fontFamily:"monospace",background:g.scope==="longterm"?"#1A1612":"#e8f4e8",color:g.scope==="longterm"?"#C9A84C":"#7A9E7E",padding:"1px 5px",borderRadius:6}}>{g.scope==="longterm"?"長期":"月度"}</span>
+                      <button onClick={()=>openEditGoal(g)} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:"#ccc",padding:0}}>✏️</button>
+                    </div>
+                    <span style={{fontSize:11,fontFamily:"monospace",color:full?"#7A9E7E":"#C9A84C"}}>{g.count}/{g.target} {g.unit}</span>
+                  </div>
+                  <div style={{background:"#f0ede8",borderRadius:5,height:5}}>
+                    <div style={{background:full?"#7A9E7E":"#C9A84C",borderRadius:5,height:"100%",width:`${pct}%`,transition:"width 0.4s"}}/>
+                  </div>
+                  <div style={{fontSize:8,fontFamily:"monospace",color:"#aaa",marginTop:2}}>{Math.round(pct)}%{full&&" ✅ 達標！"}</div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  {[["＋",1],["－",-1]].map(([l,d])=><button key={l} onClick={()=>bumpGoal(g.id,d)} style={{width:30,height:30,borderRadius:6,background:d>0?"#C9A84C":"#f0ede8",color:d>0?"#fff":"#888",border:"none",fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{l}</button>)}
+                </div>
+              </div>;
+            })}
+          </div>
+          <div style={{background:"#1A1612",color:"#F5F0E8",borderRadius:11,padding:"14px",marginTop:14}}>
+            <div style={{fontSize:9,fontFamily:"monospace",letterSpacing:2,color:"#C9A84C",marginBottom:9}}>PROGRESS</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {goals.map(g=>{const pct=Math.min(100,(g.count/g.target)*100);return <div key={g.id} style={{textAlign:"center",flex:1,minWidth:46}}><div style={{fontSize:17,marginBottom:2}}>{g.icon}</div><div style={{fontSize:10,fontFamily:"monospace",color:"#C9A84C"}}>{Math.round(pct)}%</div><div style={{fontSize:8,color:"rgba(245,240,232,0.4)",fontFamily:"monospace"}}>{g.name.slice(0,4)}</div></div>;})}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ BUILDS ════════════════════════════════════════════════════════════ */}
+      {view==="builds"&&(
+        <div style={{padding:"14px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <div>
+              <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#C9A84C",marginBottom:2}}>AI PRODUCT LOG</div>
+              <div style={{fontSize:13,color:"#888",fontWeight:300}}>{builds.length} 個作品 · 全部</div>
+            </div>
+            <button onClick={()=>setEditBuild({id:uid(),day:selDay,month:mk,name:"",desc:"",tools:[],link:"",learned:"",createdAt:Date.now()})} style={{background:"#1A1612",color:"#C9A84C",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,fontFamily:"monospace",cursor:"pointer"}}>＋ 新增作品</button>
+          </div>
+          {builds.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"#ccc"}}><div style={{fontSize:40,marginBottom:12}}>🛠</div><div style={{fontSize:13,fontFamily:"monospace"}}>還沒有紀錄</div><div style={{fontSize:11,marginTop:6,color:"#ddd"}}>每天做完一個 AI 小產品就記下來</div></div>}
+          {(()=>{
+            const grouped={};
+            [...builds].sort((a,b)=>b.createdAt-a.createdAt).forEach(b=>{
+              const gk=b.month||"other";
+              if(!grouped[gk]) grouped[gk]=[];
+              grouped[gk].push(b);
+            });
+            return Object.entries(grouped).map(([gk,gBuilds])=>(
+              <div key={gk} style={{marginBottom:24}}>
+                <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#C9A84C",marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
+                  <span>{gk}</span><div style={{flex:1,height:1,background:"#e8e4de"}}/>
+                  <span style={{color:"#aaa"}}>{gBuilds.length} 件</span>
+                </div>
+                {gBuilds.map(build=>(
+                  <div key={build.id} style={{background:"#fff",borderRadius:12,border:"1px solid #e8e4de",padding:"14px 16px",marginBottom:10,borderLeft:"4px solid #C9A84C"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                          <span style={{fontSize:14,fontWeight:700,color:"#1A1612"}}>{build.name||"未命名"}</span>
+                          <span style={{fontSize:9,fontFamily:"monospace",color:"#aaa"}}>{build.month} · {build.day}日</span>
+                        </div>
+                        {build.desc&&<div style={{fontSize:12,color:"#555",lineHeight:1.6,marginBottom:8}}>{build.desc}</div>}
+                        {build.tools?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>{build.tools.map(t=><span key={t} style={{fontSize:10,fontFamily:"monospace",background:"#1A1612",color:"#C9A84C",padding:"2px 8px",borderRadius:10}}>{t}</span>)}</div>}
+                        {build.link&&<a href={build.link} target="_blank" rel="noopener noreferrer" style={{fontSize:11,fontFamily:"monospace",color:"#3A78A0",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4,marginBottom:6}}>🔗 {build.link.length>40?build.link.slice(0,40)+"…":build.link}</a>}
+                        {build.learned&&<div style={{background:"#FFF8E8",borderRadius:7,padding:"7px 10px",fontSize:11,color:"#7A6030",lineHeight:1.6}}>💡 {build.learned}</div>}
+                      </div>
+                      <button onClick={()=>setEditBuild({...build})} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#ccc",padding:"2px 4px",flexShrink:0}}>✏️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ));
+          })()}
+        </div>
+      )}
+
+      {/* ══ MODAL: month config ════════════════════════════════════════════════ */}
+      {editMonthCfg&&(
+        <Modal onClose={()=>setEditMonthCfg(false)}>
+          <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#888",marginBottom:14}}>月份設定 · {curY}/{curM}</div>
+
+          {/* Name */}
+          <div style={{marginBottom:12}}>
+            <Label>月份名稱（選填）</Label>
+            <input value={cfg.name||""} onChange={e=>saveCfgPatch({name:e.target.value})} placeholder="例：新工作第一個月" style={inputStyle}/>
+          </div>
+
+          {/* Weekday themes */}
+          <div style={{marginBottom:14}}>
+            <Label>平日主題設定</Label>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {[1,2,3,4,5].map(wd=>{
+                const wdName=["","一","二","三","四","五"][wd];
+                const cur=cfg.wdTheme?.[wd]||"free";
+                return <div key={wd} style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:11,fontFamily:"monospace",color:"#888",width:20}}>週{wdName}</span>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap",flex:1}}>
+                    {["brain","body","life","focus","work","free"].map(th=>{
+                      const m=THEME_META[th];
+                      const isSel=cur===th;
+                      return <button key={th} onClick={()=>saveCfgPatch({wdTheme:{...cfg.wdTheme,[wd]:th}})}
+                        style={{padding:"3px 8px",borderRadius:6,border:`1.5px solid ${isSel?m.color:"#e8e4de"}`,background:isSel?m.bg:"#fff",color:isSel?m.color:"#888",fontSize:10,fontFamily:"monospace",cursor:"pointer"}}>
+                        {m.icon} {m.label}
+                      </button>;
+                    })}
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>
+
+          {/* Special days */}
+          <div style={{marginBottom:16}}>
+            <Label>特殊日設定（點日期 → 選類型）</Label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+              {Array.from({length:totalDays},(_,i)=>i+1).filter(d=>!isWeekend(curY,curM,d)).map(d=>{
+                const sp=cfg.specialDays?.[d];
+                const m=sp?THEME_META[sp]:null;
+                return <button key={d} onClick={()=>{
+                  const opts=["work","travel","event",null];
+                  const cur=cfg.specialDays?.[d]||null;
+                  const next=opts[(opts.indexOf(cur)+1)%opts.length];
+                  const nd={...cfg.specialDays};
+                  if(next) nd[d]=next; else delete nd[d];
+                  saveCfgPatch({specialDays:nd});
+                }} style={{minWidth:28,height:28,borderRadius:5,background:m?m.bg:"#f5f2ee",border:`1.5px solid ${m?m.color:"#e8e4de"}`,color:m?m.color:"#aaa",fontSize:10,fontFamily:"monospace",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:2}}>
+                  {m&&<span style={{fontSize:11}}>{m.icon}</span>}{d}
+                </button>;
+              })}
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {["work","travel","event"].map(t=>{const m=THEME_META[t];return <div key={t} style={{fontSize:10,fontFamily:"monospace",color:m.color,display:"flex",alignItems:"center",gap:3}}><span>{m.icon}</span>{m.label}</div>;})}
+              <div style={{fontSize:10,fontFamily:"monospace",color:"#aaa"}}>（再點一次取消）</div>
+            </div>
+          </div>
+
+          <button onClick={()=>setEditMonthCfg(false)} style={{...saveBtnStyle,width:"100%"}}>完成 ✓</button>
+        </Modal>
+      )}
+
+      {/* ══ MODAL: edit task list ════════════════════════════════════════════ */}
+      {editDay!==null&&<Modal onClose={()=>setEditDay(null)}>
+        <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#888",marginBottom:8}}>編輯 {curM}/{editDay} 任務</div>
+        <div style={{fontSize:11,color:"#aaa",marginBottom:8,fontFamily:"monospace"}}>每行一個任務，可加 emoji</div>
+        <textarea autoFocus value={editText} onChange={e=>setEditText(e.target.value)} style={{width:"100%",height:150,padding:"10px",borderRadius:8,border:"1.5px solid #e8e4de",fontFamily:"'Noto Serif TC',serif",fontSize:14,background:"#fff",color:"#1A1612",outline:"none",resize:"none",lineHeight:1.8}}/>
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <button onClick={()=>setEditDay(null)} style={cancelBtnStyle}>取消</button>
+          <button onClick={saveEditTask} style={saveBtnStyle}>儲存 ✓</button>
+        </div>
+      </Modal>}
+
+      {/* ══ MODAL: edit block ════════════════════════════════════════════════ */}
+      {editBlock!==null&&<Modal onClose={()=>setEditBlock(null)}>
+        <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#888",marginBottom:12}}>編輯行程</div>
+        <div style={{marginBottom:10}}><Label>任務名稱</Label><input value={editBlockForm.taskText} onChange={e=>setEditBlockForm(f=>({...f,taskText:e.target.value}))} style={inputStyle}/></div>
+        <div style={{display:"flex",gap:10,marginBottom:10}}>
+          <div style={{flex:1}}><Label>開始時間</Label>
+            <div style={{display:"flex",gap:4,alignItems:"center"}}>
+              <input type="number" min={HOUR_START} max={HOUR_END} value={editBlockForm.startH} onChange={e=>setEditBlockForm(f=>({...f,startH:e.target.value}))} style={{...inputStyle,textAlign:"center",padding:"8px 4px"}}/>
+              <span style={{color:"#aaa",fontWeight:600}}>:</span>
+              <select value={editBlockForm.startM} onChange={e=>setEditBlockForm(f=>({...f,startM:e.target.value}))} style={{...inputStyle,textAlign:"center",padding:"8px 4px",cursor:"pointer"}}><option value="0">00</option><option value="30">30</option></select>
+            </div>
+          </div>
+        </div>
+        <div style={{marginBottom:18}}><Label>時長（30 分鐘為單位）</Label>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+            {[{label:"30分",durH:0,durM:30},{label:"1小時",durH:1,durM:0},{label:"1.5hr",durH:1,durM:30},{label:"2小時",durH:2,durM:0},{label:"2.5hr",durH:2,durM:30},{label:"3小時",durH:3,durM:0},{label:"4小時",durH:4,durM:0},{label:"自訂",durH:null}].map(opt=>{
+              const isSel=opt.durH!==null&&parseInt(editBlockForm.durH)===opt.durH&&parseInt(editBlockForm.durM||0)===opt.durM;
+              return <button key={opt.label} onClick={()=>opt.durH!==null?setEditBlockForm(f=>({...f,durH:String(opt.durH),durM:String(opt.durM)})):setEditBlockForm(f=>({...f,durH:"",durM:"0"}))} style={{padding:"8px 4px",borderRadius:7,border:`1.5px solid ${isSel?theme.color:"#e8e4de"}`,background:isSel?theme.bg:"#fff",color:isSel?theme.color:"#666",fontSize:11,fontFamily:"monospace",cursor:"pointer",fontWeight:isSel?700:400}}>{opt.label}</button>;
+            })}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setEditBlock(null)} style={cancelBtnStyle}>取消</button>
+          <button onClick={saveEditBlock} style={saveBtnStyle}>儲存 ✓</button>
+        </div>
+      </Modal>}
+
+      {/* ══ MODAL: task priority/est ═════════════════════════════════════════ */}
+      {editMeta!==null&&(()=>{
+        const {day,idx}=editMeta,meta=getMeta(day,idx),taskName=getDayTasks(day)[idx]||"";
+        return <Modal onClose={()=>setEditMeta(null)}>
+          <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#888",marginBottom:4}}>任務設定</div>
+          <div style={{fontSize:13,fontWeight:600,marginBottom:16,color:"#1A1612"}}>{taskName}</div>
+          <Label>優先級</Label>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:18}}>
+            {Object.entries(PRIORITY).map(([key,p])=>{
+              const isSel=meta.priority===key;
+              return <button key={key} onClick={()=>setMeta(day,idx,{priority:key})} style={{padding:"10px 6px",borderRadius:9,border:`2px solid ${isSel?p.color:"#e8e4de"}`,background:isSel?p.bg:"#fff",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                <span style={{fontSize:18}}>{p.dot}</span>
+                <span style={{fontSize:11,fontWeight:isSel?700:400,color:isSel?p.color:"#666",fontFamily:"monospace"}}>{p.label}</span>
+                <span style={{fontSize:9,color:"#bbb",textAlign:"center",lineHeight:1.3}}>{key==="must"?"今天必做":key==="should"?"重要彈性":"做了加分"}</span>
+              </button>;
+            })}
+          </div>
+          <Label>預估時間</Label>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:20}}>
+            {EST_OPTIONS.map(opt=>{
+              const isSel=meta.estMins===opt.mins,tc=theme.color;
+              return <button key={opt.mins} onClick={()=>setMeta(day,idx,{estMins:opt.mins})} style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${isSel?tc:"#e8e4de"}`,background:isSel?`${tc}15`:"#fff",color:isSel?tc:"#666",fontSize:12,fontFamily:"monospace",fontWeight:isSel?700:400,cursor:"pointer"}}>{opt.label}</button>;
+            })}
+          </div>
+          <button onClick={()=>setEditMeta(null)} style={{...saveBtnStyle,width:"100%"}}>完成 ✓</button>
+        </Modal>;
+      })()}
+
+      {/* ══ MODAL: goal edit ═════════════════════════════════════════════════ */}
+      {editGoalId!==null&&<Modal onClose={()=>setEditGoalId(null)}>
+        <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#888",marginBottom:14}}>{editGoalId==="__new__"?"新增目標":"編輯目標"}</div>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <div style={{flex:"0 0 58px"}}><Label>ICON</Label><input value={editGoalForm.icon} onChange={e=>setEditGoalForm(f=>({...f,icon:e.target.value}))} style={{...inputStyle,fontSize:22,textAlign:"center",padding:"6px"}}/></div>
+          <div style={{flex:1}}><Label>名稱</Label><input autoFocus={editGoalId==="__new__"} value={editGoalForm.name} onChange={e=>setEditGoalForm(f=>({...f,name:e.target.value}))} placeholder="目標名稱" style={inputStyle}/></div>
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <div style={{flex:1}}><Label>目標數量</Label><input type="number" min="1" value={editGoalForm.target} onChange={e=>setEditGoalForm(f=>({...f,target:e.target.value}))} style={inputStyle}/></div>
+          <div style={{flex:1}}><Label>單位</Label><input value={editGoalForm.unit} onChange={e=>setEditGoalForm(f=>({...f,unit:e.target.value}))} placeholder="次/本/件" style={inputStyle}/></div>
+        </div>
+        <div style={{marginBottom:18}}><Label>類型</Label>
+          <div style={{display:"flex",gap:8}}>
+            {[["month","月度目標","每月重設"],["longterm","長期目標","持續累積"]].map(([s,l,sub])=>{
+              const isSel=editGoalForm.scope===s;
+              return <button key={s} onClick={()=>setEditGoalForm(f=>({...f,scope:s}))} style={{flex:1,padding:"10px 8px",borderRadius:9,border:`2px solid ${isSel?"#1A1612":"#e8e4de"}`,background:isSel?"#1A1612":"#fff",color:isSel?"#C9A84C":"#666",cursor:"pointer",textAlign:"center"}}>
+                <div style={{fontSize:12,fontWeight:600,marginBottom:2}}>{l}</div>
+                <div style={{fontSize:10,opacity:0.7,fontFamily:"monospace"}}>{sub}</div>
+              </button>;
+            })}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          {editGoalId!=="__new__"&&<button onClick={()=>deleteGoal(editGoalId)} style={{flex:"0 0 42px",padding:"11px",borderRadius:8,border:"1px solid #f0ddd8",background:"#FFF5F3",color:"#C4714A",fontSize:15,cursor:"pointer"}}>🗑</button>}
+          <button onClick={()=>setEditGoalId(null)} style={cancelBtnStyle}>取消</button>
+          <button onClick={saveGoalEdit} style={saveBtnStyle}>儲存 ✓</button>
+        </div>
+      </Modal>}
+
+      {/* ══ MODAL: goal link ═════════════════════════════════════════════════ */}
+      {goalLink!==null&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(26,22,18,0.65)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500}} onClick={e=>e.target===e.currentTarget&&setGoalLink(null)}>
+          <div style={{background:"#FAF8F4",borderRadius:"16px 16px 0 0",padding:"22px 18px 28px",width:"100%",maxWidth:480,boxShadow:"0 -8px 40px rgba(0,0,0,0.2)"}}>
+            <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#888",marginBottom:6}}>✅ 完成任務</div>
+            <div style={{fontSize:14,fontWeight:600,marginBottom:4,color:"#1A1612"}}>{goalLink.taskName}</div>
+            <div style={{fontSize:12,color:"#888",marginBottom:16}}>要記進哪個目標的進度？</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+              {goals.map(g=>{
+                const pct=Math.min(100,(g.count/g.target)*100);
+                return <button key={g.id} onClick={()=>{bumpGoal(g.id,1);setGoalLink(null);}} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:10,border:"1.5px solid #e8e4de",background:"#fff",cursor:"pointer",textAlign:"left",transition:"all 0.15s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor="#C9A84C";e.currentTarget.style.background="#FFF8E8";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e8e4de";e.currentTarget.style.background="#fff";}}>
+                  <span style={{fontSize:20}}>{g.icon}</span>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,fontWeight:600}}>{g.name}</span><span style={{fontSize:11,fontFamily:"monospace",color:"#C9A84C"}}>{g.count}/{g.target} {g.unit}</span></div>
+                    <div style={{background:"#f0ede8",borderRadius:4,height:3}}><div style={{background:"#C9A84C",borderRadius:4,height:"100%",width:`${pct}%`}}/></div>
+                  </div>
+                </button>;
+              })}
+            </div>
+            <button onClick={()=>setGoalLink(null)} style={{width:"100%",padding:"11px",borderRadius:9,border:"1px solid #e8e4de",background:"transparent",fontSize:13,color:"#888",cursor:"pointer"}}>不用，跳過</button>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: build edit ════════════════════════════════════════════════ */}
+      {editBuild!==null&&(()=>{
+        const isNew=!builds.find(b=>b.id===editBuild.id);
+        const TOOL_OPTIONS=["Claude","Cursor","v0","ChatGPT","Gemini","Notion AI","Midjourney","Replit","GitHub Copilot","自製"];
+        const toggleTool=(t)=>setEditBuild(p=>({...p,tools:p.tools?.includes(t)?p.tools.filter(x=>x!==t):[...(p.tools||[]),t]}));
+        const saveBuild=()=>{ if(isNew) setBuilds(p=>[...p,editBuild]); else setBuilds(p=>p.map(b=>b.id===editBuild.id?editBuild:b)); setEditBuild(null); };
+        const deleteBuild=()=>{ setBuilds(p=>p.filter(b=>b.id!==editBuild.id)); setEditBuild(null); };
+        return <div style={{position:"fixed",inset:0,background:"rgba(26,22,18,0.72)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500}} onClick={e=>e.target===e.currentTarget&&setEditBuild(null)}>
+          <div style={{background:"#FAF8F4",borderRadius:"16px 16px 0 0",padding:"22px 18px",width:"100%",maxWidth:480,boxShadow:"0 -8px 40px rgba(0,0,0,0.25)",maxHeight:"92vh",overflowY:"auto"}}>
+            <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#888",marginBottom:14}}>{isNew?"新增作品":"編輯作品"}</div>
+            <div style={{marginBottom:10}}><Label>作品名稱</Label><input autoFocus value={editBuild.name} onChange={e=>setEditBuild(p=>({...p,name:e.target.value}))} placeholder="例：AI 每日計畫產生器" style={inputStyle}/></div>
+            <div style={{marginBottom:10}}><Label>一句話描述</Label><input value={editBuild.desc} onChange={e=>setEditBuild(p=>({...p,desc:e.target.value}))} placeholder="做了什麼？解決了什麼問題？" style={inputStyle}/></div>
+            <div style={{marginBottom:12}}><Label>使用工具</Label>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {TOOL_OPTIONS.map(t=>{const sel=editBuild.tools?.includes(t);return <button key={t} onClick={()=>toggleTool(t)} style={{padding:"5px 10px",borderRadius:14,border:`1.5px solid ${sel?"#1A1612":"#e8e4de"}`,background:sel?"#1A1612":"#fff",color:sel?"#C9A84C":"#666",fontSize:11,fontFamily:"monospace",cursor:"pointer"}}>{t}</button>;})}
+              </div>
+            </div>
+            <div style={{marginBottom:10}}><Label>連結（選填）</Label><input value={editBuild.link} onChange={e=>setEditBuild(p=>({...p,link:e.target.value}))} placeholder="https://..." style={inputStyle}/></div>
+            <div style={{marginBottom:20}}><Label>今天學到的一件事</Label><textarea value={editBuild.learned} onChange={e=>setEditBuild(p=>({...p,learned:e.target.value}))} placeholder="例：原來用 system prompt 設角色可以讓輸出品質差很多…" style={{...inputStyle,height:72,resize:"none",lineHeight:1.6}}/></div>
+            <div style={{display:"flex",gap:8}}>
+              {!isNew&&<button onClick={deleteBuild} style={{flex:"0 0 42px",padding:"11px",borderRadius:8,border:"1px solid #f0ddd8",background:"#FFF5F3",color:"#C4714A",fontSize:15,cursor:"pointer"}}>🗑</button>}
+              <button onClick={()=>setEditBuild(null)} style={cancelBtnStyle}>取消</button>
+              <button onClick={saveBuild} style={saveBtnStyle}>儲存 ✓</button>
+            </div>
+          </div>
+        </div>;
+      })()}
+
+    </div>
+  );
+}
+
+// ── SHARED ────────────────────────────────────────────────────────────────
+const Modal=({children,onClose})=>(
+  <div style={{position:"fixed",inset:0,background:"rgba(26,22,18,0.72)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={{background:"#FAF8F4",borderRadius:"16px 16px 0 0",padding:"22px 18px",width:"100%",maxWidth:480,boxShadow:"0 -8px 40px rgba(0,0,0,0.25)",maxHeight:"88vh",overflowY:"auto"}}>{children}</div>
+  </div>
+);
+const Label=({children})=><div style={{fontSize:9,fontFamily:"monospace",color:"#aaa",marginBottom:3,letterSpacing:0.5}}>{children}</div>;
+const inputStyle={width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #e8e4de",fontSize:14,fontFamily:"'Noto Serif TC',serif",background:"#fff",color:"#1A1612",outline:"none"};
+const cancelBtnStyle={flex:1,padding:"11px",borderRadius:8,border:"1px solid #e8e4de",background:"transparent",fontSize:13,cursor:"pointer",color:"#888"};
+const saveBtnStyle={flex:2,padding:"11px",borderRadius:8,border:"none",background:"#1A1612",color:"#F5F0E8",fontSize:13,cursor:"pointer",fontWeight:600};
+
+// ── BOOT ──────────────────────────────────────────────────────────────────
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>

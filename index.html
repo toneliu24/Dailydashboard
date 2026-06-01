@@ -9,11 +9,15 @@
 <meta name="theme-color" content="#1A1612">
 <title>我的月曆</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  body { background:#F5F0E8; overscroll-behavior:none; }
-  #root { min-height:100dvh; }
+  body { background:#F2EDE6; overscroll-behavior:none; }
+  #root { min-height:100dvh; padding-top:env(safe-area-inset-top); background:#F2EDE6; }
+  /* Smooth scrolling */
+  * { -webkit-overflow-scrolling: touch; }
+  /* Remove button outlines */
+  button:focus { outline:none; }
 </style>
 </head>
 <body>
@@ -325,35 +329,66 @@ function App() {
   const dayNote = note[selDay] || "";
 
   // ── NAV ──────────────────────────────────────────────────────────────────
-  return (
-    <div style={{fontFamily:"'Noto Serif TC',serif",background:"#F5F0E8",minHeight:"100dvh",color:"#1A1612"}}>
+  // Bear-style warm colors
+  const WARM = {
+    bg:     "#F2EDE6",
+    card:   "#FDFAF6",
+    ink:    "#3D2B1F",
+    sub:    "#9C8070",
+    border: "#E8DDD4",
+    accent: "#C4855A",
+    gold:   "#C9A84C",
+    nav:    "#FBF7F2",
+  };
 
-      {/* TOP NAV */}
-      <div style={{background:"#1A1612",color:"#F5F0E8",padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 12px rgba(0,0,0,0.3)"}}>
-        {/* Month switcher */}
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={()=>{ if(curM===1){setCurY(y=>y-1);setCurM(12);}else setCurM(m=>m-1); setSelDay(1); }} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:16,cursor:"pointer",padding:"2px 4px"}}>‹</button>
-          <div style={{cursor:"pointer"}} onClick={()=>setEditMonthCfg(true)}>
-            <div style={{fontSize:9,letterSpacing:3,color:"#C9A84C",fontFamily:"monospace"}}>{curY} · {MONTH_NAMES[curM-1]}</div>
-            <div style={{fontSize:13,fontWeight:300}}>{cfg.name||MONTH_NAMES[curM-1]} <span style={{fontSize:9,color:"rgba(255,255,255,0.3)"}}>⚙</span></div>
+  return (
+    <div style={{fontFamily:"'Noto Serif TC',serif",background:WARM.bg,minHeight:"100dvh",color:WARM.ink}}>
+
+      {/* TOP NAV — warm card style like Bear.saving */}
+      <div style={{
+        background:WARM.nav,
+        borderBottom:`1px solid ${WARM.border}`,
+        padding:"12px 18px 10px",
+        display:"flex",alignItems:"center",justifyContent:"space-between",
+        position:"sticky",top:0,zIndex:100,
+        boxShadow:"0 1px 8px rgba(61,43,31,0.06)",
+      }}>
+        {/* Brand + month */}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <button onClick={()=>{ if(curM===1){setCurY(y=>y-1);setCurM(12);}else setCurM(m=>m-1); setSelDay(1); }}
+            style={{background:"none",border:"none",color:WARM.sub,fontSize:18,cursor:"pointer",padding:"0 2px",lineHeight:1}}>‹</button>
+          <div style={{cursor:"pointer",textAlign:"center"}} onClick={()=>setEditMonthCfg(true)}>
+            <div style={{fontSize:10,letterSpacing:2,color:WARM.sub,fontFamily:"'DM Sans',sans-serif",fontWeight:300,marginBottom:1}}>{curY} · {MONTH_NAMES[curM-1]}</div>
+            <div style={{fontSize:15,fontWeight:600,color:WARM.ink,fontFamily:"'Playfair Display',serif",letterSpacing:"-0.3px",display:"flex",alignItems:"center",gap:5}}>
+              {cfg.name||MONTH_NAMES[curM-1]}
+              <span style={{fontSize:10,color:WARM.sub,fontFamily:"'DM Sans',sans-serif",fontWeight:300}}>⚙</span>
+            </div>
           </div>
-          <button onClick={()=>{ if(curM===12){setCurY(y=>y+1);setCurM(1);}else setCurM(m=>m+1); setSelDay(1); }} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:16,cursor:"pointer",padding:"2px 4px"}}>›</button>
+          <button onClick={()=>{ if(curM===12){setCurY(y=>y+1);setCurM(1);}else setCurM(m=>m+1); setSelDay(1); }}
+            style={{background:"none",border:"none",color:WARM.sub,fontSize:18,cursor:"pointer",padding:"0 2px",lineHeight:1}}>›</button>
         </div>
-        {/* Tab buttons */}
+        {/* Tab pills */}
         <div style={{display:"flex",gap:4}}>
           {[["calendar","📅"],["today","☀️"],["goals","🎯"],["builds","🛠"]].map(([v,icon])=>(
-            <button key={v} onClick={()=>setView(v)} style={{background:view===v?"#C9A84C":"rgba(255,255,255,0.1)",color:view===v?"#1A1612":"#F5F0E8",border:"none",borderRadius:6,padding:"6px 11px",fontSize:14,cursor:"pointer",transition:"all 0.2s"}}>{icon}</button>
+            <button key={v} onClick={()=>setView(v)} style={{
+              background: view===v ? WARM.accent : "transparent",
+              color: view===v ? "#fff" : WARM.sub,
+              border: view===v ? "none" : `1px solid ${WARM.border}`,
+              borderRadius:10, padding:"6px 12px",
+              fontSize:14, cursor:"pointer", transition:"all 0.18s",
+              fontWeight: view===v ? 500 : 400,
+            }}>{icon}</button>
           ))}
         </div>
       </div>
 
       {/* ══ CALENDAR ══════════════════════════════════════════════════════════ */}
       {view==="calendar"&&(
-        <div style={{padding:"6px 6px 0", display:"flex", flexDirection:"column", height: isMobile ? "calc(100dvh - 54px)" : "auto"}}>
+        <div style={{padding:"10px 10px 0", display:"flex", flexDirection:"column", height: isMobile ? "calc(100dvh - 62px)" : "auto"}}>
           {/* Weekday headers */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3,flexShrink:0}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,flexShrink:0}}>
             {["一","二","三","四","五","六","日"].map(d=>(
-              <div key={d} style={{textAlign:"center",fontSize:11,fontFamily:"monospace",color:"#aaa",padding:"2px 0"}}>{d}</div>
+              <div key={d} style={{textAlign:"center",fontSize:11,fontFamily:"'DM Sans',sans-serif",fontWeight:500,color:WARM.sub,padding:"2px 0",letterSpacing:"0.5px"}}>{d}</div>
             ))}
           </div>
 
@@ -380,36 +415,55 @@ function App() {
               return (
                 <div key={day} onClick={()=>{setSelDay(day);setView("today");}}
                   style={{
-                    background:isSel?meta.color:meta.bg,
-                    border:isToday?`2px solid ${meta.color}`:`1px solid ${meta.color}25`,
-                    borderRadius:7,
-                    padding: isMobile ? "5px 4px" : "8px 8px 6px",
-                    cursor:"pointer",color:isSel?"#fff":"#1A1612",
-                    display:"flex",flexDirection:"column",gap:2,
-                    overflow:"hidden",transition:"box-shadow 0.15s,transform 0.1s",
-                    minHeight: 0, // allow flex shrink
+                    background: isSel ? meta.color : (weekend ? "transparent" : WARM.card),
+                    border: isToday ? `2px solid ${meta.color}` : (weekend ? "none" : `1px solid ${WARM.border}`),
+                    borderRadius: 10,
+                    padding: isMobile ? "6px 5px" : "9px 9px 7px",
+                    cursor:"pointer",
+                    color: isSel ? "#fff" : WARM.ink,
+                    display:"flex",flexDirection:"column",gap:3,
+                    overflow:"hidden",
+                    transition:"box-shadow 0.15s,transform 0.1s",
+                    minHeight: 0,
+                    boxShadow: weekend ? "none" : "0 1px 3px rgba(61,43,31,0.05)",
                   }}
-                  onMouseEnter={e=>{e.currentTarget.style.boxShadow=`0 4px 14px ${meta.color}40`;e.currentTarget.style.transform="translateY(-1px)";}}
-                  onMouseLeave={e=>{e.currentTarget.style.boxShadow="";e.currentTarget.style.transform="";}}
+                  onMouseEnter={e=>{if(!weekend){e.currentTarget.style.boxShadow=`0 4px 12px rgba(61,43,31,0.1)`;e.currentTarget.style.transform="translateY(-1px)";}}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow=weekend?"none":"0 1px 3px rgba(61,43,31,0.05)";e.currentTarget.style.transform="";}}
                 >
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{
-                      fontFamily:"monospace",
-                      fontSize: isMobile ? 11 : 13,
-                      fontWeight:700,
-                      background:isToday&&!isSel?meta.color:"transparent",
-                      color:isToday&&!isSel?"#fff":(isSel?"#fff":meta.color),
-                      borderRadius:4,padding:isToday&&!isSel?"1px 4px":"0"
+                      fontFamily:"'DM Sans',sans-serif",
+                      fontSize: isMobile ? 12 : 14,
+                      fontWeight: isToday ? 700 : 500,
+                      background: isToday&&!isSel ? meta.color : "transparent",
+                      color: isToday&&!isSel ? "#fff" : (isSel ? "#fff" : (weekend ? WARM.sub : WARM.ink)),
+                      borderRadius:5, padding:isToday&&!isSel?"2px 5px":"0",
                     }}>{day}</span>
-                    <span style={{fontSize: isMobile?11:13, opacity:0.85}}>{meta.icon}</span>
+                    {!weekend && <span style={{fontSize: isMobile?10:12, opacity:0.75}}>{meta.icon}</span>}
                   </div>
-                  {!weekend&&dayTasks.slice(0, isMobile?2:3).map((t,i)=>{
+                  {/* Mobile: show priority dots only. Desktop: show text */}
+                  {!weekend && isMobile && (
+                    <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:2}}>
+                      {dayTasks.slice(0,4).map((t,i)=>{
+                        const isDone=!!done[`${day}-${i}`];
+                        const mPrio=getMeta(day,i);
+                        const pColor=PRIORITY[mPrio.priority]?.color||"#aaa";
+                        return <span key={i} style={{
+                          width:6,height:6,borderRadius:"50%",
+                          background:isDone?"#ccc":(isSel?"rgba(255,255,255,0.8)":pColor),
+                          flexShrink:0,
+                          opacity: isDone?0.4:1,
+                        }}/>;
+                      })}
+                      {total>4&&<span style={{fontSize:8,fontFamily:"monospace",color:isSel?"rgba(255,255,255,0.6)":meta.color,lineHeight:"6px"}}>+{total-4}</span>}
+                    </div>
+                  )}
+                  {!weekend && !isMobile && dayTasks.slice(0,3).map((t,i)=>{
                     const isDone=!!done[`${day}-${i}`];
                     const mPrio=getMeta(day,i);
                     const pColor=PRIORITY[mPrio.priority]?.color||"#aaa";
                     return <div key={i} style={{
-                      fontSize: isMobile?10:11,
-                      lineHeight:1.3,
+                      fontSize:11,lineHeight:1.3,
                       color:isSel?"rgba(255,255,255,0.9)":(isDone?"#bbb":"#333"),
                       textDecoration:isDone?"line-through":"none",
                       display:"flex",alignItems:"flex-start",gap:3,overflow:"hidden"
@@ -418,7 +472,7 @@ function App() {
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,fontWeight:mPrio.priority==="must"&&!isDone?700:400}}>{t}</span>
                     </div>;
                   })}
-                  {!weekend&&total>(isMobile?2:3)&&<div style={{fontSize:9,fontFamily:"monospace",color:isSel?"rgba(255,255,255,0.6)":meta.color}}>+{total-(isMobile?2:3)}</div>}
+                  {!weekend&&!isMobile&&total>3&&<div style={{fontSize:9,fontFamily:"monospace",color:isSel?"rgba(255,255,255,0.6)":meta.color}}>+{total-3}</div>}
                   {!weekend&&total>0&&<div style={{marginTop:"auto",paddingTop:2}}>
                     <div style={{background:isSel?"rgba(255,255,255,0.25)":`${meta.color}20`,borderRadius:2,height:2}}>
                       <div style={{background:isSel?"#fff":meta.color,borderRadius:2,height:"100%",width:`${(comp/total)*100}%`,transition:"width 0.3s"}}/>
@@ -431,11 +485,11 @@ function App() {
           </div>
 
           {/* Legend */}
-          <div style={{padding:"8px 0 6px",flexShrink:0,display:"flex",flexWrap:"wrap",gap:6}}>
+          <div style={{padding:"8px 2px 8px",flexShrink:0,display:"flex",flexWrap:"wrap",gap:8}}>
             {Object.entries(THEME_META).map(([k,m])=>(
-              <div key={k} style={{display:"flex",alignItems:"center",gap:3,fontSize:isMobile?10:11,fontFamily:"monospace",color:"#777"}}>
-                <div style={{width:8,height:8,borderRadius:2,background:m.bg,border:`1.5px solid ${m.color}`}}/>
-                {m.icon}{m.label}
+              <div key={k} style={{display:"flex",alignItems:"center",gap:4,fontSize:isMobile?10:11,fontFamily:"'DM Sans',sans-serif",color:WARM.sub}}>
+                <div style={{width:8,height:8,borderRadius:3,background:m.bg,border:`1.5px solid ${m.color}80`}}/>
+                <span>{m.icon}</span><span style={{letterSpacing:"0.2px"}}>{m.label}</span>
               </div>
             ))}
           </div>
@@ -447,13 +501,13 @@ function App() {
         <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 50px)"}}>
 
           {/* Header */}
-          <div style={{background:theme.bg,borderBottom:`2px solid ${theme.color}20`,padding:"8px 14px",flexShrink:0}}>
+          <div style={{background:WARM.nav,borderBottom:`1px solid ${WARM.border}`,padding:"10px 16px",flexShrink:0}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span style={{fontSize:20}}>{theme.icon}</span>
                 <div>
-                  <div style={{fontSize:9,fontFamily:"monospace",letterSpacing:2,color:theme.color}}>{WEEKDAY_NAMES[getWeekday(curY,curM,selDay)]} · {curM}/{selDay}</div>
-                  <div style={{fontSize:13,fontWeight:600,color:theme.color}}>{theme.label}</div>
+                  <div style={{fontSize:10,fontFamily:"'DM Sans',sans-serif",letterSpacing:1.5,color:WARM.sub,marginBottom:1}}>{WEEKDAY_NAMES[getWeekday(curY,curM,selDay)]} · {curM}/{selDay}</div>
+                  <div style={{fontSize:16,fontWeight:600,color:theme.color,fontFamily:"'Playfair Display',serif",letterSpacing:"-0.3px"}}>{theme.icon} {theme.label}</div>
                 </div>
               </div>
               <div style={{display:"flex",gap:4,alignItems:"center"}}>
@@ -580,7 +634,8 @@ function App() {
 
       {/* ══ GOALS ══════════════════════════════════════════════════════════════ */}
       {view==="goals"&&(
-        <div style={{padding:"14px"}}>
+        <div style={{padding:"16px"}}>
+          <div style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:WARM.sub,marginBottom:12,letterSpacing:"0.2px"}}>本月目標追蹤</div>
           <div style={{marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{fontSize:10,fontFamily:"monospace",color:"#888",letterSpacing:1}}>點 +/− 更新進度</span>
             <button onClick={openAddGoal} style={{background:"#1A1612",color:"#C9A84C",border:"none",borderRadius:7,padding:"7px 13px",fontSize:11,fontFamily:"monospace",cursor:"pointer"}}>＋ 新增目標</button>
@@ -588,7 +643,7 @@ function App() {
           <div style={{display:"flex",flexDirection:"column",gap:9}}>
             {goals.map(g=>{
               const pct=Math.min(100,(g.count/g.target)*100),full=pct>=100;
-              return <div key={g.id} style={{background:full?"#F0F8F0":"#fff",borderRadius:11,border:full?"1px solid #7A9E7E40":"1px solid #e8e4de",padding:"13px 14px",display:"flex",alignItems:"center",gap:11}}>
+              return <div key={g.id} style={{background:full?"#EEF6EE":WARM.card,borderRadius:14,border:full?"1px solid #7A9E7E40":`1px solid ${WARM.border}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 1px 4px rgba(61,43,31,0.05)"}}>
                 <span style={{fontSize:22,cursor:"pointer"}} onClick={()=>openEditGoal(g)}>{g.icon}</span>
                 <div style={{flex:1}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -621,11 +676,11 @@ function App() {
 
       {/* ══ BUILDS ════════════════════════════════════════════════════════════ */}
       {view==="builds"&&(
-        <div style={{padding:"14px"}}>
+        <div style={{padding:"16px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
             <div>
-              <div style={{fontSize:10,fontFamily:"monospace",letterSpacing:2,color:"#C9A84C",marginBottom:2}}>AI PRODUCT LOG</div>
-              <div style={{fontSize:13,color:"#888",fontWeight:300}}>{builds.length} 個作品 · 全部</div>
+              <div style={{fontSize:11,fontFamily:"'DM Sans',sans-serif",letterSpacing:1.5,color:WARM.sub,marginBottom:3,fontWeight:400}}>AI PRODUCT LOG</div>
+              <div style={{fontSize:17,fontFamily:"'Playfair Display',serif",color:WARM.ink,fontWeight:400}}>{builds.length} 個作品</div>
             </div>
             <button onClick={()=>setEditBuild({id:uid(),day:selDay,month:mk,name:"",desc:"",tools:[],link:"",learned:"",createdAt:Date.now()})} style={{background:"#1A1612",color:"#C9A84C",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,fontFamily:"monospace",cursor:"pointer"}}>＋ 新增作品</button>
           </div>
@@ -644,7 +699,7 @@ function App() {
                   <span style={{color:"#aaa"}}>{gBuilds.length} 件</span>
                 </div>
                 {gBuilds.map(build=>(
-                  <div key={build.id} style={{background:"#fff",borderRadius:12,border:"1px solid #e8e4de",padding:"14px 16px",marginBottom:10,borderLeft:"4px solid #C9A84C"}}>
+                  <div key={build.id} style={{background:WARM.card,borderRadius:14,border:`1px solid ${WARM.border}`,padding:"15px 17px",marginBottom:10,borderLeft:`4px solid ${WARM.accent}`,boxShadow:"0 1px 4px rgba(61,43,31,0.05)"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                       <div style={{flex:1}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
@@ -884,14 +939,14 @@ function App() {
 
 // ── SHARED ────────────────────────────────────────────────────────────────
 const Modal=({children,onClose})=>(
-  <div style={{position:"fixed",inset:0,background:"rgba(26,22,18,0.72)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div style={{background:"#FAF8F4",borderRadius:"16px 16px 0 0",padding:"22px 18px",width:"100%",maxWidth:480,boxShadow:"0 -8px 40px rgba(0,0,0,0.25)",maxHeight:"88vh",overflowY:"auto"}}>{children}</div>
+  <div style={{position:"fixed",inset:0,background:"rgba(61,43,31,0.55)",backdropFilter:"blur(8px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={{background:WARM.card,borderRadius:"18px 18px 0 0",padding:"24px 20px",width:"100%",maxWidth:480,boxShadow:"0 -12px 40px rgba(61,43,31,0.15)",maxHeight:"88vh",overflowY:"auto"}}>{children}</div>
   </div>
 );
-const Label=({children})=><div style={{fontSize:9,fontFamily:"monospace",color:"#aaa",marginBottom:3,letterSpacing:0.5}}>{children}</div>;
-const inputStyle={width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #e8e4de",fontSize:14,fontFamily:"'Noto Serif TC',serif",background:"#fff",color:"#1A1612",outline:"none"};
-const cancelBtnStyle={flex:1,padding:"11px",borderRadius:8,border:"1px solid #e8e4de",background:"transparent",fontSize:13,cursor:"pointer",color:"#888"};
-const saveBtnStyle={flex:2,padding:"11px",borderRadius:8,border:"none",background:"#1A1612",color:"#F5F0E8",fontSize:13,cursor:"pointer",fontWeight:600};
+const Label=({children})=><div style={{fontSize:10,fontFamily:"'DM Sans',sans-serif",color:"#9C8070",marginBottom:4,letterSpacing:"0.8px",fontWeight:500,textTransform:"uppercase"}}>{children}</div>;
+const inputStyle={width:"100%",padding:"10px 13px",borderRadius:10,border:"1.5px solid #E8DDD4",fontSize:14,fontFamily:"'Noto Serif TC',serif",background:"#FDFAF6",color:"#3D2B1F",outline:"none"};
+const cancelBtnStyle={flex:1,padding:"12px",borderRadius:12,border:"1px solid #E8DDD4",background:"transparent",fontSize:13,cursor:"pointer",color:"#9C8070",fontFamily:"'Noto Serif TC',serif"};
+const saveBtnStyle={flex:2,padding:"12px",borderRadius:12,border:"none",background:"#C4855A",color:"#fff",fontSize:13,cursor:"pointer",fontWeight:600,fontFamily:"'Noto Serif TC',serif"};
 
 
 // ── BOOT ──

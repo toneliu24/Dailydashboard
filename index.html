@@ -13,7 +13,7 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   body { background:#F5F0E8; overscroll-behavior:none; }
-  #root { min-height:100vh; min-height:100dvh; }
+  #root { min-height:100dvh; }
 </style>
 </head>
 <body>
@@ -23,6 +23,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef } = React;
+
+// React hooks from UMD
 
 // ── CALENDAR UTILS ────────────────────────────────────────────────────────
 const MONTH_NAMES = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
@@ -324,7 +326,7 @@ function App() {
 
   // ── NAV ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{fontFamily:"'Noto Serif TC',serif",background:"#F5F0E8",minHeight:"100vh",color:"#1A1612"}}>
+    <div style={{fontFamily:"'Noto Serif TC',serif",background:"#F5F0E8",minHeight:"100dvh",color:"#1A1612"}}>
 
       {/* TOP NAV */}
       <div style={{background:"#1A1612",color:"#F5F0E8",padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 12px rgba(0,0,0,0.3)"}}>
@@ -347,14 +349,13 @@ function App() {
 
       {/* ══ CALENDAR ══════════════════════════════════════════════════════════ */}
       {view==="calendar"&&(
-        <div style={{padding:"12px 10px"}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
+        <div style={{padding:"8px 6px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
             {["一","二","三","四","五","六","日"].map(d=>(
-              <div key={d} style={{textAlign:"center",fontSize:10,fontFamily:"monospace",color:"#aaa",padding:"2px 0",letterSpacing:1}}>{d}</div>
+              <div key={d} style={{textAlign:"center",fontSize:11,fontFamily:"monospace",color:"#aaa",padding:"2px 0"}}>{d}</div>
             ))}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-            {/* offset: Mon=1 so offset = (getWeekday-1+7)%7 */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,gridAutoRows:"1fr"}}>
             {Array.from({length:(getWeekday(curY,curM,1)+6)%7},(_,i)=><div key={`e${i}`}/>)}
             {Array.from({length:totalDays},(_,i)=>i+1).map(day=>{
               const th    = getDayTheme(day);
@@ -368,40 +369,62 @@ function App() {
               const weekend=isWeekend(curY,curM,day);
               return (
                 <div key={day} onClick={()=>{setSelDay(day);setView("today");}}
-                  style={{background:isSel?meta.color:meta.bg,border:isToday?`2px solid ${meta.color}`:`1px solid ${meta.color}25`,borderRadius:9,padding:"7px 7px 6px",minHeight:weekend?50:86,cursor:"pointer",color:isSel?"#fff":"#1A1612",display:"flex",flexDirection:"column",gap:3,overflow:"hidden",transition:"box-shadow 0.15s,transform 0.1s"}}
+                  style={{
+                    background:isSel?meta.color:meta.bg,
+                    border:isToday?`2px solid ${meta.color}`:`1px solid ${meta.color}25`,
+                    borderRadius:7,
+                    padding: isMobile ? "5px 4px" : "8px 8px 6px",
+                    minHeight: weekend ? (isMobile?36:44) : (isMobile?72:100),
+                    cursor:"pointer",color:isSel?"#fff":"#1A1612",
+                    display:"flex",flexDirection:"column",gap:2,
+                    overflow:"hidden",transition:"box-shadow 0.15s,transform 0.1s"
+                  }}
                   onMouseEnter={e=>{e.currentTarget.style.boxShadow=`0 4px 14px ${meta.color}40`;e.currentTarget.style.transform="translateY(-1px)";}}
                   onMouseLeave={e=>{e.currentTarget.style.boxShadow="";e.currentTarget.style.transform="";}}
                 >
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontFamily:"monospace",fontSize:12,fontWeight:700,background:isToday&&!isSel?meta.color:"transparent",color:isToday&&!isSel?"#fff":(isSel?"#fff":meta.color),borderRadius:4,padding:isToday&&!isSel?"1px 5px":"0"}}>{day}</span>
-                    <span style={{fontSize:11,opacity:0.8}}>{meta.icon}</span>
+                    <span style={{
+                      fontFamily:"monospace",
+                      fontSize: isMobile ? 11 : 13,
+                      fontWeight:700,
+                      background:isToday&&!isSel?meta.color:"transparent",
+                      color:isToday&&!isSel?"#fff":(isSel?"#fff":meta.color),
+                      borderRadius:4,padding:isToday&&!isSel?"1px 4px":"0"
+                    }}>{day}</span>
+                    <span style={{fontSize: isMobile?11:13, opacity:0.85}}>{meta.icon}</span>
                   </div>
-                  {!weekend&&dayTasks.slice(0,3).map((t,i)=>{
+                  {!weekend&&dayTasks.slice(0, isMobile?2:3).map((t,i)=>{
                     const isDone=!!done[`${day}-${i}`];
                     const mPrio=getMeta(day,i);
                     const pColor=PRIORITY[mPrio.priority]?.color||"#aaa";
-                    return <div key={i} style={{fontSize:9,lineHeight:1.3,color:isSel?"rgba(255,255,255,0.9)":(isDone?"#bbb":"#444"),textDecoration:isDone?"line-through":"none",display:"flex",alignItems:"flex-start",gap:3,overflow:"hidden"}}>
-                      <span style={{width:5,height:5,borderRadius:"50%",flexShrink:0,marginTop:2,background:isDone?"#ccc":(isSel?"rgba(255,255,255,0.8)":pColor)}}/>
+                    return <div key={i} style={{
+                      fontSize: isMobile?10:11,
+                      lineHeight:1.3,
+                      color:isSel?"rgba(255,255,255,0.9)":(isDone?"#bbb":"#333"),
+                      textDecoration:isDone?"line-through":"none",
+                      display:"flex",alignItems:"flex-start",gap:3,overflow:"hidden"
+                    }}>
+                      <span style={{width:4,height:4,borderRadius:"50%",flexShrink:0,marginTop:3,background:isDone?"#ccc":(isSel?"rgba(255,255,255,0.8)":pColor)}}/>
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,fontWeight:mPrio.priority==="must"&&!isDone?700:400}}>{t}</span>
                     </div>;
                   })}
-                  {!weekend&&total>3&&<div style={{fontSize:8,fontFamily:"monospace",color:isSel?"rgba(255,255,255,0.6)":meta.color,opacity:0.7}}>+{total-3} 更多</div>}
+                  {!weekend&&total>(isMobile?2:3)&&<div style={{fontSize:9,fontFamily:"monospace",color:isSel?"rgba(255,255,255,0.6)":meta.color}}>+{total-(isMobile?2:3)}</div>}
                   {!weekend&&total>0&&<div style={{marginTop:"auto",paddingTop:2}}>
                     <div style={{background:isSel?"rgba(255,255,255,0.25)":`${meta.color}20`,borderRadius:2,height:2}}>
                       <div style={{background:isSel?"#fff":meta.color,borderRadius:2,height:"100%",width:`${(comp/total)*100}%`,transition:"width 0.3s"}}/>
                     </div>
-                    {sched>0&&<div style={{fontSize:7,fontFamily:"monospace",marginTop:2,color:isSel?"rgba(255,255,255,0.6)":meta.color}}>⏰ {sched}</div>}
+                    {sched>0&&<div style={{fontSize:8,fontFamily:"monospace",marginTop:1,color:isSel?"rgba(255,255,255,0.6)":meta.color}}>⏰{sched}</div>}
                   </div>}
                 </div>
               );
             })}
           </div>
           {/* Legend */}
-          <div style={{marginTop:12,display:"flex",flexWrap:"wrap",gap:8}}>
+          <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:6}}>
             {Object.entries(THEME_META).map(([k,m])=>(
-              <div key={k} style={{display:"flex",alignItems:"center",gap:4,fontSize:9,fontFamily:"monospace",color:"#888"}}>
-                <div style={{width:9,height:9,borderRadius:2,background:m.bg,border:`1.5px solid ${m.color}`}}/>
-                {m.icon} {m.label}
+              <div key={k} style={{display:"flex",alignItems:"center",gap:3,fontSize: isMobile?10:11,fontFamily:"monospace",color:"#777"}}>
+                <div style={{width:8,height:8,borderRadius:2,background:m.bg,border:`1.5px solid ${m.color}`}}/>
+                {m.icon}{m.label}
               </div>
             ))}
           </div>
@@ -859,7 +882,8 @@ const inputStyle={width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px s
 const cancelBtnStyle={flex:1,padding:"11px",borderRadius:8,border:"1px solid #e8e4de",background:"transparent",fontSize:13,cursor:"pointer",color:"#888"};
 const saveBtnStyle={flex:2,padding:"11px",borderRadius:8,border:"none",background:"#1A1612",color:"#F5F0E8",fontSize:13,cursor:"pointer",fontWeight:600};
 
-// ── BOOT ──────────────────────────────────────────────────────────────────
+
+// ── BOOT ──
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(React.createElement(App));
 </script>
